@@ -14,47 +14,97 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef KEYBOARDS_WHITEFOX_SIMPLE_VISUALIZER_H_
-#define KEYBOARDS_WHITEFOX_SIMPLE_VISUALIZER_H_
+#if defined(VISUALIZER_ENABLE)
 
+#include "animations.h"
 #include "visualizer.h"
+
+#ifdef BACKLIGHT_ENABLE
+#include "led_keyframes.h"
+#endif
+
 #include "visualizer_keyframes.h"
-#include "led.h"
-#include "default_animations.h"
 
 
-static bool initial_update = true;
+#if defined(LCD_ENABLE) || defined(LCD_BACKLIGHT_ENABLE) || defined(BACKLIGHT_ENABLE)
 
-// Feel free to modify the animations below, or even add new ones if needed
+static bool keyframe_enable(keyframe_animation_t* animation, visualizer_state_t* state) {
+#ifdef BACKLIGHT_ENABLE
+    led_keyframe_enable(animation, state);
+#endif
+    return false;
+}
 
-void initialize_user_visualizer(visualizer_state_t* state) {
-    // The brightness will be dynamically adjustable in the future
-    // But for now, change it here.
-    initial_update = true;
-    start_keyframe_animation(&default_startup_animation);
+static bool keyframe_disable(keyframe_animation_t* animation, visualizer_state_t* state) {
+#ifdef BACKLIGHT_ENABLE
+    led_keyframe_disable(animation, state);
+#endif
+    return false;
+}
+
+static bool keyframe_fade_in(keyframe_animation_t* animation, visualizer_state_t* state) {
+    bool ret = false;
+#ifdef BACKLIGHT_ENABLE
+    ret |= led_keyframe_fade_in_all(animation, state);
+#endif
+    return ret;
+}
+
+static bool keyframe_fade_out(keyframe_animation_t* animation, visualizer_state_t* state) {
+    bool ret = false;
+#ifdef BACKLIGHT_ENABLE
+    ret |= led_keyframe_fade_out_all(animation, state);
+#endif
+    return ret;
 }
 
 
-void update_user_visualizer_state(visualizer_state_t* state, visualizer_keyboard_status_t* prev_status) {
-    // Add more tests, change the colors and layer texts here
-    // Usually you want to check the high bits (higher layers first)
-    // because that's the order layers are processed for keypresses
-    // You can for check for example:
-    // state->status.layer
-    // state->status.default_layer
-    // state->status.leds (see led.h for available statuses)
+// Don't worry, if the startup animation is long, you can use the keyboard like normal
+// during that time
+keyframe_animation_t default_startup_animation = {
+    .num_frames = 2,
+    .loop = false,
+    .frame_lengths = {0, gfxMillisecondsToTicks(5000)},
+    .frame_functions = {
+            keyframe_enable,
+            keyframe_fade_in,
+    },
+};
 
-    if (initial_update) { initial_update=false; start_keyframe_animation(&led_test_animation); }
-}
+keyframe_animation_t default_suspend_animation = {
+    .num_frames = 2,
+    .loop = false,
+    .frame_lengths = {gfxMillisecondsToTicks(1000), 0},
+    .frame_functions = {
+            keyframe_fade_out,
+            keyframe_disable,
+    },
+};
+#endif
 
+#if defined(BACKLIGHT_ENABLE)
+#define CROSSFADE_TIME 1000
+#define GRADIENT_TIME 3000
 
-void user_visualizer_suspend(visualizer_state_t* state) {
-    start_keyframe_animation(&default_suspend_animation);
-}
+keyframe_animation_t led_test_animation = {
+    .num_frames = 14,
+    .loop = true,
+    .frame_lengths = {
+        gfxMillisecondsToTicks(1000), // fade in
+        gfxMillisecondsToTicks(1000), // no op (leds on)
+        gfxMillisecondsToTicks(1000), // fade out
+        gfxMillisecondsToTicks(CROSSFADE_TIME), // crossfade
 
-void user_visualizer_resume(visualizer_state_t* state) {
-    initial_update = true;
-    start_keyframe_animation(&default_startup_animation);
-}
+    },
+    .frame_functions = {
+        led_keyframe_fade_in_all,
+        keyframe_no_operation,
+        led_keyframe_fade_out_all,
+        led_keyframe_left_to_right_gradient,
+        led_keyframe_left_to_right_gradient,
+    },
+};
+#endif
 
-#endif /* KEYBOARDS_WHITEFOX_SIMPLE_VISUALIZER_H_ */
+#endif
+
